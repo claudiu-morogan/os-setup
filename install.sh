@@ -1,48 +1,172 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Just to look good
+# Pretty banner
 echo '##############################'
 echo '# Preparing to setup your PC #'
 echo '#           MASTER           #'
 echo '##############################'
-echo ''
-echo 'Enter your email address:'
-read git_email
+echo
 
-# update the system before installing the tools
-cd ~ && sudo apt-get update -y && sudo apt-get upgrade -y
+# --- Helpers ---
+# Install a list of apt packages only if they're not already installed
+ensure_packages() {
+  local pkg missing=()
+  for pkg in "$@"; do
+    if dpkg -s "$pkg" >/dev/null 2>&1; then
+      echo "$pkg: already installed, skipping"
+    else
+      missing+=("$pkg")
+    fi
+  done
+  if [ "${#missing[@]}" -gt 0 ]; then
+    echo "Installing: ${missing[*]}"
+    sudo apt-get install -y "${missing[@]}"
+  fi
+}
 
-# Installing terminal utilities
-echo 'Installing terminal utilities'
-sudo apt-get install -y mc htop neofetch xclip git docker docker.io docker-engine docker-compose curl python3 python3-pip
+
+# --- Collect Git identity ---
+read -rp "Enter your Git full name (e.g. Claudiu Morogan): " git_name
+read -rp "Enter your Git email address: " git_email
+
+# --- Update system ---
+echo
+echo "Updating system..."
+sudo apt-get update -y
+sudo apt-get upgrade -y
+
+# --- Base terminal/dev utilities ---
+echo
+echo "Installing terminal utilities..."
+ensure_packages \
+  curl wget git unzip zip ca-certificates gnupg lsb-release \
+  build-essential software-properties-common \
+  htop tree jq mc xclip python3 python3-pip
+
+# --- Fonts ---
+echo
+echo "Installing FiraCode..."
+ensure_packages fonts-firacode
+
+# --- VS Code (no snap; use Microsoft apt repo) ---
+echo
+echo "Installing VS Code via Microsoft apt repo..."
+if command -v code >/dev/null 2>&1; then
+  echo "VS Code already installed. Skipping."
+else
+  sudo install -d -m 0755 /etc/apt/keyrings
+  curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+    | sudo gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg
+
+  ARCH="$(dpkg --print-architecture)"
+  echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/code stable main" \
+    | sudo tee /etc/apt/sources.list.d/vscode.list >/dev/null
+
+  sudo apt-get update -y
+  ensure_packages code
+fi
+
+
+
+# Installing Docker Engine
+echo "Installing Docker Engine (official repo)..."
+if command -v docker >/dev/null 2>&1; then
+  echo "Docker already installed. Skipping Docker installation."
+else
+  sudo apt-get remove -y docker docker-engine docker.io containerd runc || true
+
+  sudo apt-get update -y
+  ensure_packages ca-certificates curl gnupg lsb-release
+
+  sudo install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+  ARCH="$(dpkg --print-architecture)"
+  CODENAME="$(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")"
+
+  echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $CODENAME stable" \
+    | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+
+  sudo apt-get update -y
+  ensure_packages docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+  sudo systemctl enable --now docker
+fi
+
+
+
 
 # Adding ppa for icon pack
-sudo add-apt-repository ppa:papirus/papirus -y && sudo apt-get update -y
+# Adding ppa for icon pack
+if [ ! -f /etc/apt/sources.list.d/papirus-ubuntu-papirus.list ]; then
+  sudo add-apt-repository ppa:papirus/papirus -y && sudo apt-get update -y
+else
+  echo "Papirus PPA already present, skipping"
+fi
 
 echo 'Installing VLC'
-sudo apt-get install -y vlc vlc-plugin-access-extra libbluray-bdj libdvdcss2
+ensure_packages vlc vlc-plugin-access-extra libbluray-bdj libdvdcss2
 
 # Docker setup
-sudo groupadd docker || true
-sudo usermod -aG docker $USER
-sudo chmod 777 /var/run/docker.sock
-docker --version
+if ! getent group docker >/dev/null 2>&1; then
+  sudo groupadd docker
+fi
 
-echo 'Generating a SSH Key'
-ssh-keygen -t rsa -b 4096 -C $git_email
-ssh-add ~/.ssh/id_rsa
-cat ~/.ssh/id_rsa.pub | xclip -selection clipboard
+if ! groups "$USER" | grep -qw docker; then
+  sudo usermod -aG docker "$USER"
+  echo "$USER added to docker group; you may need to log out and log back in for this to take effect"
+else
+  echo "$USER is already in the docker group"
+fi
 
-echo 'Installing FiraCode'
-sudo apt-get install -y fonts-firacode
+docker --version || true
 
-echo 'Installing VSCode'
-sudo snap install code --classic
+# --- Configure Git ---
+echo
+echo "Configuring Git..."
+git config --global user.name "$git_name"
+git config --global user.email "$git_email"
+git config --global init.defaultBranch main
+git config --global pull.rebase false
+git config --global core.editor "code --wait" || true
 
-echo 'Installing PHPStorm'
-sudo snap install phpstorm --classic
+# --- Add alias for c='clear && cd ~/Desktop' ---
+echo
+echo "Adding alias c='clear && cd ~/Desktop' ..."
+BASHRC="$HOME/.bashrc"
+if ! grep -q "alias c=" "$BASHRC"; then
+  echo "alias c='clear && cd ~/Desktop'" >> "$BASHRC"
+fi
 
-echo 'Installing Datagrip'
-sudo snap install datagrip --classic
+# --- Generate SSH key for Git hosting ---
+echo
+echo "Setting up SSH key for Git hosting..."
 
-echo 'All setup, enjoy!'
+SSH_DIR="$HOME/.ssh"
+KEY_PATH="$SSH_DIR/id_ed25519"
+PUB_PATH="${KEY_PATH}.pub"
+
+mkdir -p "$SSH_DIR"
+chmod 700 "$SSH_DIR"
+
+if [[ -f "$KEY_PATH" ]]; then
+  echo "An SSH key already exists at $KEY_PATH"
+else
+  echo "Generating a new ed25519 SSH key..."
+  ssh-keygen -t ed25519 -C "$git_email" -f "$KEY_PATH" -N ""
+fi
+
+if ! pgrep -u "$USER" ssh-agent >/dev/null 2>&1; then
+  eval "$(ssh-agent -s)"
+fi
+ssh-add "$KEY_PATH" >/dev/null
+
+echo
+echo "Public SSH key:"
+echo "------------------------------------------------------------"
+cat "$PUB_PATH"
+echo "------------------------------------------------------------"
+
+echo "All setup, enjoy!"
