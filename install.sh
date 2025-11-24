@@ -44,6 +44,35 @@ ensure_packages \
   build-essential software-properties-common \
   htop tree jq mc xclip python3 python3-pip
 
+set -euo pipefail
+
+# Helper: ensure ~/.inputrc contains setting to ignore case during completion
+TARGET="$HOME/.inputrc"
+LINE='set completion-ignore-case on'
+
+if [ -f "$TARGET" ]; then
+  if grep -qF "$LINE" "$TARGET"; then
+    echo "$LINE already present in $TARGET"
+    exit 0
+  else
+    echo "Appending ignore-case setting to $TARGET"
+    printf "\n# Enable case-insensitive tab completion\n%s\n" "$LINE" >> "$TARGET"
+  fi
+else
+  echo "Creating $TARGET with ignore-case setting"
+  cat > "$TARGET" <<'EOF'
+# Readline inputrc - created by os-setup helper
+# Enable case-insensitive tab completion
+set completion-ignore-case on
+EOF
+fi
+
+# Ensure reasonable permissions
+chmod 644 "$TARGET" || true
+
+echo "Done. Current $TARGET contents:"
+sed -n '1,200p' "$TARGET"
+
 # --- Fonts ---
 echo
 echo "Installing FiraCode..."
