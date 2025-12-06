@@ -8,6 +8,11 @@ echo '#           MASTER           #'
 echo '##############################'
 echo
 
+# Ensure default projects directory exists
+echo "Ensuring $HOME/.projects exists..."
+mkdir -p "$HOME/.projects"
+chmod 755 "$HOME/.projects" || true
+
 # --- Helpers ---
 # Install a list of apt packages only if they're not already installed
 ensure_packages() {
