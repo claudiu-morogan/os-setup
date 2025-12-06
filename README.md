@@ -61,80 +61,35 @@ privileges. It prints the generated SSH public key at the end so you can copy it
 
 ## Helper scripts
 
-This repository also contains small helper scripts for convenience.
-
-- `add_inputrc_ignorecase.sh`: ensures the current user's `~/.inputrc` contains the setting
-    `set completion-ignore-case on` which enables case-insensitive tab completion.
-
-    To run it:
-
-    ```bash
-    chmod +x add_inputrc_ignorecase.sh
-    ./add_inputrc_ignorecase.sh
-    ```
-
-    Behavior:
-    - If `~/.inputrc` already contains the setting, the script does nothing.
-    - If `~/.inputrc` exists but doesn't contain the setting, the script appends the setting.
-    - If `~/.inputrc` doesn't exist, the script creates it and writes the setting.
-
-    The script prints the resulting `~/.inputrc` contents when it finishes.
-
-    You can integrate this helper into `install.sh` by invoking it near the end of the script
-    (or copy its logic directly into `install.sh`) if you want the setting applied during the
-    automated setup.
-
-## Notes & Troubleshooting
-
-- If Docker commands require `sudo` after the script runs, log out and log back in (or reboot) so
-    group membership changes take effect.
-- If an APT install fails, fix the underlying issue and re-run the script or install the failing
-    package manually.
-- The script installs specific packages listed above — remove or add packages in `install.sh` if you
-    need a different set.
-
-## Contributing
-
-Open an issue or submit a pull request with improvements or suggestions.
-
-## License
-
-This project is licensed under the MIT License.
-
 # OS Setup Script
 
 A small installer that automates common system configuration and developer tooling setup on a
-Debian/Ubuntu-based system. The repository contains a single script: `install.sh`.
+Debian/Ubuntu-based system. The repository contains a primary installer script: `install.sh`.
 
 Read the script before running it to understand and customize the exact steps it will perform.
 
 **Script:** `install.sh`
 
-## What this script actually does
+## What this script does (summary)
 
-- Updates the system package lists and upgrades installed packages (`apt-get update && upgrade`).
-- Installs base terminal and development utilities via APT:
-    `curl`, `wget`, `git`, `unzip`, `zip`, `ca-certificates`, `gnupg`, `lsb-release`, `build-essential`,
-    `software-properties-common`, `htop`, `tree`, `jq`, `mc`, `xclip`, `python3`, `python3-pip`.
+- Updates the system package lists and upgrades installed packages.
+- Installs base terminal and development utilities via APT (curl, wget, git, unzip, zip, ca-certificates,
+  gnupg, lsb-release, build-essential, software-properties-common, htop, tree, jq, mc, xclip,
+  python3, python3-pip).
 - Installs the Fira Code font (`fonts-firacode`).
-- Installs Visual Studio Code using the official Microsoft APT repository (not via Snap).
-- Installs Docker Engine from Docker's official repository and the packages:
-    `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-buildx-plugin`, `docker-compose-plugin`.
-    The script enables and starts the Docker service and attempts to add the current user to the
-    `docker` group.
-- Adds the Papirus icon theme PPA (`ppa:papirus/papirus`) if not already present.
-- Installs VLC and related packages: `vlc`, `vlc-plugin-access-extra`, `libbluray-bdj`, `libdvdcss2`.
+- Installs Visual Studio Code via the Microsoft APT repository.
+- Installs Docker Engine from Docker's official repository and related packages, enables the service
+  and attempts to add the current user to the `docker` group.
+- Adds the Papirus icon theme PPA if not present.
+- Installs VLC and related packages.
 - Configures Git global settings (name, email, default branch `main`, core editor `code --wait`).
-- Adds a small alias to `~/.bashrc`: `alias c='clear && cd ~/Desktop'` (if not present).
-- Generates an `ed25519` SSH keypair at `~/.ssh/id_ed25519` if one does not already exist,
-    starts `ssh-agent`, and adds the key to the agent; the public key is printed to the terminal.
+- Adds a small alias to `~/.bashrc` and generates an ed25519 SSH keypair at `~/.ssh/id_ed25519` if
+  one does not already exist.
 
 ## Prerequisites
 
-- A Debian/Ubuntu-based distribution (the script relies on `apt` and Ubuntu/Debian OS-release fields).
+- Debian/Ubuntu-based distribution (the script uses `apt` and assumes standard Ubuntu/Debian fields).
 - A user with `sudo` privileges.
-- The script does not rely on Snap for VS Code (it uses the Microsoft apt repo). If you prefer snaps,
-    edit `install.sh` accordingly.
 
 ## Usage
 
@@ -145,31 +100,42 @@ git clone <repository-url>
 cd os-setup
 ```
 
-2. Make the installer executable:
+2. Make the installer executable (optional):
 
 ```bash
 chmod +x install.sh
 ```
 
-3. Inspect `install.sh` and edit any steps you want to change (packages, repos, or optional parts).
+3. Inspect `install.sh` and edit any steps you want to change.
 
-4. Run the installer:
+4. Run the installer and then run the helper `git.py` that clones repositories.
+
+One-line (with leading exclamation mark as requested):
+
+```bash
+!./install.sh && python3 git.py
+```
+
+Or run step-by-step:
 
 ```bash
 ./install.sh
+python3 git.py
 ```
 
-The script will prompt for your Git name and email, and will request `sudo` when it needs elevated
-privileges. It prints the generated SSH public key at the end so you can copy it to your Git host.
+Notes:
+- `git.py` will clone repositories into `~/.projects` (the installer now ensures this directory exists).
+- The installer prompts for your Git name and email, and will request `sudo` when needed.
 
-## Notes & Troubleshooting
+## Helper scripts
 
-- If Docker commands require `sudo` after the script runs, log out and log back in (or reboot) so
-    group membership changes take effect.
-- If an APT install fails, fix the underlying issue and re-run the script or install the failing
-    package manually.
-- The script installs specific packages listed above — remove or add packages in `install.sh` if you
-    need a different set.
+This repository also contains small helper scripts (see files in the repo). For example the
+`add_inputrc_ignorecase.sh` helper ensures `~/.inputrc` contains `set completion-ignore-case on`.
+
+## Troubleshooting
+
+- If Docker commands still require `sudo` after running the script, log out and log back in (or reboot)
+  to refresh group membership.
 
 ## Contributing
 
