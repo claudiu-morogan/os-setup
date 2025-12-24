@@ -132,6 +132,25 @@ Notes:
 This repository also contains small helper scripts (see files in the repo). For example the
 `add_inputrc_ignorecase.sh` helper ensures `~/.inputrc` contains `set completion-ignore-case on`.
 
+## Despre `git.py` (clonare prin SSH)
+
+- Am actualizat `git.py` pentru a folosi implicit URL-urile SSH când clonează un repo.
+- Scriptul convertește automat URL-urile de forma `https://host/owner/repo.git` în forma SSH
+  `git@host:owner/repo.git` înainte de a rula `git clone`.
+- Asigurați-vă că aveți cheia SSH configurată și adăugată la `ssh-agent`, precum și că cheia
+  publică este înregistrată în contul dvs. Git (de ex. GitHub -> Settings -> SSH and GPG keys).
+- Dacă preferați să folosiți un URL explicit SSH, setați `url` în lista `repos` din `git.py` ca
+  `git@github.com:owner/repo.git`.
+
+Exemplu de rulare:
+
+```bash
+python3 git.py
+```
+
+Dacă întâmpinați solicitări de user/parolă la push, verificați configurația locală Git și că
+`ssh-agent` rulează cu cheia dvs. încărcată (folosiți `ssh-add -l` pentru a lista cheile adăugate).
+
 ## Troubleshooting
 
 - If Docker commands still require `sudo` after running the script, log out and log back in (or reboot)

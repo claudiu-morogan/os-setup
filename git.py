@@ -10,6 +10,7 @@ Simple repo cloner example.
 import subprocess
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 # Where to clone repos by default
 BASE_DIR = Path.home() / ".projects"
@@ -29,6 +30,30 @@ repos = [
     # Add more repos here
 ]
 
+
+def ensure_ssh_url(url: str) -> str:
+    """Convert common HTTPS git URLs to their SSH form.
+
+    Examples:
+      https://github.com/owner/repo.git -> git@github.com:owner/repo.git
+    If the URL already looks like an SSH URL it is returned unchanged.
+    """
+    if not url:
+        return url
+    url = url.strip()
+    # Already an SSH URL
+    if url.startswith("git@") or url.startswith("ssh://"):
+        return url
+    # Handle HTTP/HTTPS
+    parsed = urlparse(url)
+    if parsed.scheme in ("http", "https") and parsed.netloc:
+        host = parsed.netloc
+        path = parsed.path.lstrip("/")
+        # Common SSH form: git@host:owner/repo.git
+        return f"git@{host}:{path}"
+    # Fallback: return original
+    return url
+
 def clone_repo(repo, base_dir=BASE_DIR):
     target = base_dir / repo["name"]
     if target.exists():
@@ -37,7 +62,11 @@ def clone_repo(repo, base_dir=BASE_DIR):
     print(f"Cloning {repo['name']} -> {target}")
     base_dir.mkdir(parents=True, exist_ok=True)
     try:
-        subprocess.run(["git", "clone", repo["url"], str(target)], check=True)
+        url = repo.get("url")
+        ssh_url = ensure_ssh_url(url)
+        if ssh_url != url:
+            print(f"Using SSH URL for {repo['name']}: {ssh_url}")
+        subprocess.run(["git", "clone", ssh_url, str(target)], check=True)
         print(f"Cloned {repo['name']}")
     except subprocess.CalledProcessError as e:
         print(f"Failed to clone {repo['name']}: {e}")
