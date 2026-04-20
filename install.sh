@@ -8,6 +8,17 @@ echo '#           MASTER           #'
 echo '##############################'
 echo
 
+# --- Install type ---
+while true; do
+  read -rp "Install type? [server/desktop]: " INSTALL_TYPE
+  case "$INSTALL_TYPE" in
+    server|desktop) break ;;
+    *) echo "Please enter 'server' or 'desktop'." ;;
+  esac
+done
+echo "Running $INSTALL_TYPE setup..."
+echo
+
 # Ensure default projects directory exists
 echo "Ensuring $HOME/.projects exists..."
 mkdir -p "$HOME/.projects"
@@ -30,7 +41,6 @@ ensure_packages() {
   fi
 }
 
-
 # --- Collect Git identity ---
 read -rp "Enter your Git full name (e.g. Claudiu Morogan): " git_name
 read -rp "Enter your Git email address: " git_email
@@ -44,21 +54,30 @@ sudo apt-get upgrade -y
 # --- Base terminal/dev utilities ---
 echo
 echo "Installing terminal utilities..."
-ensure_packages \
-  curl wget git unzip zip ca-certificates gnupg lsb-release \
-  build-essential software-properties-common \
-  htop tree jq mc xclip python3 python3-pip
 
-set -euo pipefail
+BASE_PACKAGES=(
+  curl wget git unzip zip ca-certificates gnupg lsb-release
+  build-essential software-properties-common
+  htop tree jq mc python3 python3-pip
+)
 
-# Helper: ensure ~/.inputrc contains setting to ignore case during completion
+DESKTOP_PACKAGES=(
+  xclip
+)
+
+if [[ "$INSTALL_TYPE" == "desktop" ]]; then
+  ensure_packages "${BASE_PACKAGES[@]}" "${DESKTOP_PACKAGES[@]}"
+else
+  ensure_packages "${BASE_PACKAGES[@]}"
+fi
+
+# --- ~/.inputrc: case-insensitive tab completion ---
 TARGET="$HOME/.inputrc"
 LINE='set completion-ignore-case on'
 
 if [ -f "$TARGET" ]; then
   if grep -qF "$LINE" "$TARGET"; then
     echo "$LINE already present in $TARGET"
-    exit 0
   else
     echo "Appending ignore-case setting to $TARGET"
     printf "\n# Enable case-insensitive tab completion\n%s\n" "$LINE" >> "$TARGET"
@@ -71,39 +90,37 @@ else
 set completion-ignore-case on
 EOF
 fi
-
-# Ensure reasonable permissions
 chmod 644 "$TARGET" || true
 
-echo "Done. Current $TARGET contents:"
-sed -n '1,200p' "$TARGET"
-
-# --- Fonts ---
-echo
-echo "Installing FiraCode..."
-ensure_packages fonts-firacode
-
-# --- VS Code (no snap; use Microsoft apt repo) ---
-echo
-echo "Installing VS Code via Microsoft apt repo..."
-if command -v code >/dev/null 2>&1; then
-  echo "VS Code already installed. Skipping."
-else
-  sudo install -d -m 0755 /etc/apt/keyrings
-  curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
-    | sudo gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg
-
-  ARCH="$(dpkg --print-architecture)"
-  echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/code stable main" \
-    | sudo tee /etc/apt/sources.list.d/vscode.list >/dev/null
-
-  sudo apt-get update -y
-  ensure_packages code
+# --- Desktop-only: Fonts ---
+if [[ "$INSTALL_TYPE" == "desktop" ]]; then
+  echo
+  echo "Installing FiraCode font..."
+  ensure_packages fonts-firacode
 fi
 
+# --- Desktop-only: VS Code (no snap; use Microsoft apt repo) ---
+if [[ "$INSTALL_TYPE" == "desktop" ]]; then
+  echo
+  echo "Installing VS Code via Microsoft apt repo..."
+  if command -v code >/dev/null 2>&1; then
+    echo "VS Code already installed. Skipping."
+  else
+    sudo install -d -m 0755 /etc/apt/keyrings
+    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+      | sudo gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg
 
+    ARCH="$(dpkg --print-architecture)"
+    echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/code stable main" \
+      | sudo tee /etc/apt/sources.list.d/vscode.list >/dev/null
 
-# Installing Docker Engine
+    sudo apt-get update -y
+    ensure_packages code
+  fi
+fi
+
+# --- Docker Engine ---
+echo
 echo "Installing Docker Engine (official repo)..."
 if command -v docker >/dev/null 2>&1; then
   echo "Docker already installed. Skipping Docker installation."
@@ -129,21 +146,6 @@ else
   sudo systemctl enable --now docker
 fi
 
-
-
-
-# Adding ppa for icon pack
-# Adding ppa for icon pack
-if [ ! -f /etc/apt/sources.list.d/papirus-ubuntu-papirus.list ]; then
-  sudo add-apt-repository ppa:papirus/papirus -y && sudo apt-get update -y
-else
-  echo "Papirus PPA already present, skipping"
-fi
-
-echo 'Installing VLC'
-ensure_packages vlc vlc-plugin-access-extra libbluray-bdj libdvdcss2
-
-# Docker setup
 if ! getent group docker >/dev/null 2>&1; then
   sudo groupadd docker
 fi
@@ -157,6 +159,20 @@ fi
 
 docker --version || true
 
+# --- Desktop-only: Papirus icon theme + VLC ---
+if [[ "$INSTALL_TYPE" == "desktop" ]]; then
+  echo
+  echo "Adding Papirus icon theme PPA..."
+  if [ ! -f /etc/apt/sources.list.d/papirus-ubuntu-papirus.list ]; then
+    sudo add-apt-repository ppa:papirus/papirus -y && sudo apt-get update -y
+  else
+    echo "Papirus PPA already present, skipping"
+  fi
+
+  echo "Installing VLC..."
+  ensure_packages vlc vlc-plugin-access-extra libbluray-bdj libdvdcss2
+fi
+
 # --- Configure Git ---
 echo
 echo "Configuring Git..."
@@ -166,12 +182,14 @@ git config --global init.defaultBranch main
 git config --global pull.rebase false
 git config --global core.editor "code --wait" || true
 
-# --- Add alias for c='clear && cd ~/Desktop' ---
-echo
-echo "Adding alias c='clear && cd ~/Desktop' ..."
-BASHRC="$HOME/.bashrc"
-if ! grep -q "alias c=" "$BASHRC"; then
-  echo "alias c='clear && cd ~/Desktop'" >> "$BASHRC"
+# --- Desktop-only: alias c='clear && cd ~/Desktop' ---
+if [[ "$INSTALL_TYPE" == "desktop" ]]; then
+  echo
+  echo "Adding alias c='clear && cd ~/Desktop'..."
+  BASHRC="$HOME/.bashrc"
+  if ! grep -q "alias c=" "$BASHRC"; then
+    echo "alias c='clear && cd ~/Desktop'" >> "$BASHRC"
+  fi
 fi
 
 # --- Generate SSH key for Git hosting ---
